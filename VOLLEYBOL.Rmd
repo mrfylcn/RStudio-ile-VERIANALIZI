@@ -1,0 +1,886 @@
+---
+title: "Veri Analizi"
+author: "Maruf YALÇIN"
+date: "2023-06-13"
+output: html_document
+---
+
+```{r}
+library(readxl)
+
+volleyball<-read_excel("verianalizi.xlsx")
+
+set.seed(256)
+trainIndex <- sample(1:nrow(volleyball), size = round(0.8*nrow(volleyball)), replace=FALSE)
+train <- volleyball[trainIndex ,]
+test <- volleyball[-trainIndex ,]
+```
+
+
+
+
+```{r}
+library("openxlsx")
+write.xlsx(train, 'train.xlsx')
+write.xlsx(test, 'test.xlsx')
+```
+
+
+
+```{r}
+library(dplyr)
+glimpse(train)
+summary(train)
+
+train <- as.data.frame(train)
+train$TAKIM <- as.factor(train$TAKIM)
+train$ŞEHİR <- as.factor(train$ŞEHİR)
+train$OYUNCU <- as.factor(train$OYUNCU)
+train$UYRUĞU <- as.factor(train$UYRUĞU)
+train$POZİSYON <- as.factor(train$POZİSYON)
+summary(train)
+```
+
+
+```{r}
+train$Ser_kat[train$IYI_SERVİS >= 0 & train$IYI_SERVİS <=  6]  <- "Kotu"
+train$Ser_kat[train$IYI_SERVİS >= 7 & train$IYI_SERVİS <=  14]  <- "Orta"
+train$Ser_kat[train$IYI_SERVİS >= 15] <- "Iyı"
+
+train$Hat_kat[train$HATALI_SERVİS >= 0 & train$HATALI_SERVİS <=  6]  <- "Iyı"
+train$Hat_kat[train$HATALI_SERVİS >= 7 & train$HATALI_SERVİS <=  14]  <- "Orta"
+train$Hat_kat[train$HATALI_SERVİS >= 15] <- "Kotu"
+
+train$Ser_kat <- factor(train$Ser_kat, levels=c("Kotu","Orta","Iyı"))
+train$Hat_kat <- factor(train$Hat_kat, levels=c("Iyı","Orta","Kotu"))
+
+summary(train)
+```
+
+
+```{r}
+library(funModeling)
+profiling_num(train)
+plot_num(train)
+freq(train)
+
+```
+
+
+```{r}
+train$Ser_kat[train$IYI_SERVİS >= 0 & train$IYI_SERVİS <=  6]  <- "Kotu"
+train$Ser_kat[train$IYI_SERVİS >= 7 & train$IYI_SERVİS <=  14]  <- "Orta"
+train$Ser_kat[train$IYI_SERVİS >= 15] <- "Iyı"
+
+train$Hat_kat[train$HATALI_SERVİS >= 0 & train$HATALI_SERVİS <=  6]  <- "Iyı"
+train$Hat_kat[train$HATALI_SERVİS >= 7 & train$HATALI_SERVİS <=  14]  <- "Orta"
+train$Hat_kat[train$HATALI_SERVİS >= 15] <- "Kotu"
+
+train$Ser_kat <- factor(train$Ser_kat, levels=c("Kotu","Orta","Iyı"))
+train$Hat_kat <- factor(train$Hat_kat, levels=c("Iyı","Orta","Kotu"))
+
+summary(train)
+
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(train, aes(x=Ser_kat,y=BLOK_SAYISI, fill=Ser_kat))+
+  geom_boxplot()+
+  stat_summary(fun = median, geom="line", group= 1, color= "black", size = 1)    
+
+```
+
+
+```{r}
+n <- nrow(train)
+train_sorted <- train[order(train$BLOK_HUCÜM),] #ascending
+ortnc_derinlik<-(n+1)/2
+median(train$BLOK_HUCÜM)
+mean(train$BLOK_HUCÜM)
+hist(train$BLOK_HUCÜM)
+
+```
+
+
+
+```{r}
+###DEGISIM OLCULERI
+stdev <- sd(train$HATALI_SERVİS)
+mean <- mean(train$HATALI_SERVİS)
+Degisim_kats_HATALI_SERVİS <- (stdev/mean)*100
+
+```
+
+
+```{r}
+#Cinsiyete gˆre FEV'in yay˝l˝m˝ icin:
+sd_dk <- function(x) {c(std<-sd(x), dk<-(sd(x)/mean(x))*100)}
+tapply(train$BLOK_SAYISI, train$POZİSYON, sd_dk)
+
+```
+
+
+```{r}
+#Kesilmis ortalama
+p <- 0.1
+mean(train$BLOK_SAYISI, trim = p)
+```
+
+
+```{r}
+#Kalan gozlem say˝s˝ hesaplanmak istenirse:
+n <- nrow(train)
+ks <-n-(as.integer(2*p*n)) 
+ks
+
+```
+
+
+```{r}
+#Geometrik ortalama
+library("psych")
+geometric.mean(train$SET_BAŞINA_SAYI)
+
+dt <- table(train$TOPLAM_SAYI,train$ŞEHİR)
+prop.table(dt,2) # Column proportions
+round(100*prop.table(dt,2), 2) # Round column prop to 2 digits (percents)
+addmargins(round(prop.table(dt,2), 2),1)
+
+```
+
+
+```{r}
+library(DescTools)      
+Assocs(dt)[1:3,1] #phi and contingency coeff
+
+```
+
+
+```{r}
+library("gplots")
+balloonplot(t(dt), main ="Servis Sayısına göre oyuncu performansı ", xlab ="", ylab="",
+            label = FALSE,show.margins = FALSE)
+
+```
+
+
+```{r}
+#4 way contingency
+dt2 <- xtabs(~ TAKIM+ŞEHİR+OYUNCU+Ser_kat, data=train)
+dt22 <- as.data.frame(ftable(dt2))
+
+```
+
+
+```{r}
+library(ggpubr)
+
+ggballoonplot(
+  dt22, x = "OYUNCU", y = "ŞEHİR",
+  size = "Freq", fill = "Freq",
+  facet.by = c("Ser_kat","TAKIM"),
+  ggtheme = theme_bw())
+
+```
+
+
+```{r}
+#Chi-square
+dt_c <- table(train$Hat_kat,train$Ser_kat)
+dtc_exp <- chisq.test(dt_c)$expected
+rowcs <- function(i, obs, exp) {
+  sum(((obs[i,] - exp[i,])^2)/exp[i,])
+}
+
+chi_dtc <- as.matrix(lapply(seq_len(nrow(dt_c)), rowcs, obs = dt_c, exp = dtc_exp))
+rownames(chi_dtc) <- rownames(dt_c)
+chi_dtc
+
+```
+
+
+```{r}
+library(inspectdf)
+library(dplyr)
+train %>% inspect_types()
+tra_cat <- train %>% inspect_cat()
+tra_cat$levels$Hat_kat
+
+
+
+library(ggplot2)
+```
+
+
+```{r}
+#BAR PLOT
+ggplot(train,aes(TAKIM))+
+  geom_bar()
+
+ggplot(train,aes(TAKIM))+
+  geom_bar(aes(fill=TAKIM))+
+  xlab("OYUNCU") + ylab("Frekanslar") +
+  ggtitle("OYUNCU Dağılımı") +
+  scale_fill_discrete(name = "OYUNCU")
+
+```
+
+
+```{r}
+#2kategorikle
+ggplot(train,aes(Ser_kat, fill=TAKIM))+
+  geom_bar(position=position_dodge())+
+  ggtitle("Servis Kategorilerindeki Oyuncu Dağılımı")+
+  xlab("Servis Kategorileri")+
+  ylab("Sıklıklar")+
+  scale_fill_discrete(name = "Oyuncu")+
+  theme(axis.title.x = element_text(color="black", face="bold", size=12),
+        axis.title.y = element_text(color="black", face="bold",size=12),
+        plot.title = element_text(hjust = 0.5,color="black", face="bold", size=14),
+        legend.title = element_text(colour="black",face="bold",size=12))
+#scale_x_discrete(labels = c("Kotu"="Kötü","Orta","Genc"="Genç"))
+
+```
+
+
+```{r}
+#Count eklenerek:
+ggplot(train, aes(Ser_kat, fill = TAKIM)) + 
+  geom_bar() + 
+  geom_text(aes(label=..count..),stat="count",position=position_stack(0.5))
+
+```
+
+
+```{r}
+#Yuzdesel olarak:
+library(dplyr)
+tra_pct <- train %>% group_by(Ser_kat, TAKIM) %>%
+  dplyr::summarise(count=n()) %>%
+  mutate(pct=round(count/sum(count),2))
+
+ggplot(tra_pct, aes(Ser_kat, pct, fill = TAKIM)) + 
+  geom_bar(stat='identity') + 
+  geom_text(aes(label=scales::percent(pct)), position = position_stack(vjust = .5))+
+  scale_y_continuous(labels = scales::percent)
+
+```
+
+
+```{r}
+#PIE CHART
+library(plotly)
+cross<-as.data.frame(prop.table(table(train$ŞEHİR))) 
+colnames(cross)[1] <- "ŞEHİR"
+plot_ly(cross, labels = ~ŞEHİR, values = ~Freq, type = 'pie')%>% layout(title ='OYUNCU Degişkenindeki Dağılım')
+
+```
+
+
+
+```{r}
+#HISTOGRAM
+hist(train$BLOK_SAYISI, col = "lightpink")
+
+```
+
+
+
+```{r}
+#Yogunluk grafigi
+ggplot(train,aes(BLOK_HUCÜM))+
+  geom_density()
+
+```
+
+
+
+```{r}
+#Histogram+Yogunluk bırlıkte
+ggplot(train,aes(BLOK_HUCÜM))+
+  geom_histogram(aes(y=..density..), fill="white", color="black")+
+  geom_density(alpha=.4,fill="violet")
+```
+
+
+
+```{r}
+#Q-Q PLOT
+library(ggpubr)
+ggqqplot(train$BLOK_HUCÜM)
+
+```
+
+
+```{r}
+#BOX PLOT
+ggplot(train, aes(y=BLOK_HUCÜM))+
+  geom_boxplot()
+
+```
+
+```{r}
+ggplot(train, aes(x=Ser_kat,y=BLOK_HUCÜM, fill=Ser_kat))+
+  geom_boxplot()+
+  labs(title="Servis Kategorileri İçin BLOK_HUCÜM Kutu Çizimi",
+       x="Servis Kategorileri", y = "BLOK_HUCÜM")+
+  scale_fill_discrete(name = "Servis Kategorileri")+
+  stat_summary(fun = median, geom="line", group= 1, color= "black", size = 1) 
+
+```
+
+```{r}
+ggplot(train, aes(x=Ser_kat,y=BLOK_HUCÜM, fill=Ser_kat)) +
+  geom_boxplot(width=0.3)+
+  stat_summary(fun.y = median, geom="line", group= 1, color= "blue", size = 1)+
+  stat_summary(geom = 'line', linetype = "dashed",group=1,size = 1,fun.y = quantile, fun.args = list(probs = 0.25), position = position_dodge(0.75)) + 
+  stat_summary(geom = 'line', group= 1,linetype = "dashed",size = 1, fun.y = quantile, fun.args = list(probs = 0.75), position = position_dodge(0.75)) 
+
+```
+
+
+```{r}
+#Ucdegerlerin rengini ve seklini degistirme:
+ggplot(train, aes(x=Ser_kat,y=BLOK_HUCÜM, fill=Ser_kat)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+               outlier.size=1)
+
+```
+
+
+
+
+```{r}
+#3. bir kategorik degiskenin de eklenmesi:
+ggplot(train, aes(x = Ser_kat, y = BLOK_HUCÜM, fill = TAKIM)) +
+  geom_boxplot(position = position_dodge(width = 0.9)) +
+  stat_summary(fun = median,geom = 'line',
+               aes(group = TAKIM, colour = TAKIM),size=1,
+               position = position_dodge(width = 0.9))
+
+```
+
+
+
+```{r}
+#Sacılım Cizimi:
+library(tidyverse)
+ggplot(train, aes(IYI_SERVİS,KAZANILMIŞ_SAYI))+
+  geom_point(size=2,shape=21,stroke=1,color="dodgerblue1", fill="white")+
+  geom_smooth(method = "lm", col="darkblue",se = FALSE)
+
+```
+
+
+
+```{r}
+#Ikili-cinsiyet kırılımında:
+ggplot(train, aes(OYUNCU,TOPLAM_SERVİS, color=TAKIM, shape=TAKIM))+
+  geom_point(size=3,alpha=0.6)
+
+```
+
+
+```{r}
+#Ikili-Birimler de eklenirse
+ggplot(train,aes(x=OYUNCU,y=TOPLAM_SAYI))+
+  geom_point(size=1)+
+  geom_text(label=rownames(train),nudge_x=0.25,nudge_y=0.25, check_overlap=T)+
+  geom_smooth(method=lm,col="red",se=FALSE)
+```
+
+
+```{r}
+#Ikılı- Dagılım da eklenirse(+hist)
+library(ggExtra)
+gr <- ggplot(train,aes(x=BLOK_SAYISI,y=BLOK_HUCÜM))+
+  geom_point()+
+  geom_text(size=3,label=rownames(train),nudge_x=0.25,
+            nudge_y=0.25, check_overlap=T)+
+  geom_smooth(method=lm,col="brown1", se=FALSE)
+
+ggMarginal(gr,type="histogram",fill="darksalmon")
+
+```
+
+
+```{r}
+#Altıgen Cizim
+library(hexbin)
+ggplot(train,aes(x=BLOK_SAYISI,y=IYI_SERVİS))+
+  geom_hex(bins=20, color = "black")+
+  scale_fill_gradient(low="mistyrose2", high="violetred3")
+
+
+```
+
+
+
+
+```{r}
+#SACILIM MATRISLERI
+cor_train <- train[,c(8,9,6)]
+library(GGally)
+cor(cor_train)#Korelasyon degerleri
+plot(cor_train)
+ggpairs(cor_train)#yogunluk+sacılım+corr
+
+```
+
+
+```{r}
+#Sacılım matrisi- Histogram+Yogunluk+Duzlestırme+Korelasyon
+
+library(PerformanceAnalytics)
+chart.Correlation(cor_train, histogram=TRUE, pch=19)
+
+```
+
+
+
+
+```{r}
+#ETKILESIM 
+#2 değişenin yani cinsiyet ile yaşın birlikte etkisi var mı yok mu bunu incelemek icin:
+etk_train <- train%>%
+  group_by(OYUNCU,Ser_kat)%>% 
+  summarise(Median=median(BLOK_HUCÜM))
+etk_train
+
+ggplot(etk_train, aes(x = Ser_kat, y = Median,color=OYUNCU,group=OYUNCU)) +
+  geom_line() +
+  geom_point()
+
+library(funModeling)
+plot_num(train)
+```
+
+
+
+```{r}
+#Boy-FEV:
+ggplot(train, aes(KAZANILMIŞ_SAYI,BLOK_HUCÜM))+
+  geom_point()+
+  geom_smooth(method = "loess", col="red",se = FALSE)
+
+train$BLOK_HUCÜM_log<-log10(train$BLOK_HUCÜM)
+
+```
+
+
+```{r}
+#Age-FEV
+hist(train$OYNANMIŞ_SET)
+train$OYNANMIŞ_SET_log<-log10(train$OYNANMIŞ_SET) #Age'de logaritmik dönüsüm
+hist(train$OYNANMIŞ_SET_log)
+
+train$OYNANMIŞ_SET_kok<-sqrt(train$OYNANMIŞ_SET) #Age'de kok dönüsümü
+hist(train$OYNANMIŞ_SET_kok) 
+
+ggplot(train, aes(OYNANMIŞ_SET_kok,BLOK_HUCÜM_log))+
+  geom_point(size=1)+
+  geom_text(label=rownames(train),nudge_x=0.04,check_overlap=T,size=2.5)+
+  geom_smooth(method = "loess", col="darkblue",se = FALSE)
+
+```
+
+
+
+
+```{r}
+#polinomial 
+#merkezilestirme:
+mean_BLOK_SAYISI <- mean(train$BLOK_SAYISI)
+train$BLOK_SAYISI_merk <- (train$BLOK_SAYISI-mean_BLOK_SAYISI)
+
+library(ggplot2)
+ggplot(train, aes(x = BLOK_SAYISI_merk, y =BLOK_HUCÜM_log )) +
+  stat_smooth(method = "lm", se = FALSE, color = "green", formula = y ~ x) +
+  stat_smooth(method = "lm", se = FALSE, color = "blue", formula = y ~ x + I(x ^ 2)) +
+  stat_smooth(method = "lm", se = FALSE, color = "red", formula = y ~ x + I(x ^ 2)+ I(x ^ 3)) +
+  geom_point(colour = "black", size = 1)
+
+```
+
+
+
+```{r}
+#polinomial 
+#merkezilestirme:
+mean_BLOK_SAYISI <- mean(train$BLOK_SAYISI)
+train$BLOK_SAYISI_merk <- (train$BLOK_SAYISI-mean_BLOK_SAYISI)
+
+library(ggplot2)
+ggplot(train, aes(x = BLOK_SAYISI_merk, y =BLOK_HUCÜM_log )) +
+  stat_smooth(method = "lm", se = FALSE, color = "green", formula = y ~ x) +
+  stat_smooth(method = "lm", se = FALSE, color = "blue", formula = y ~ x + I(x ^ 2)) +
+  stat_smooth(method = "lm", se = FALSE, color = "red", formula = y ~ x + I(x ^ 2)+ I(x ^ 3)) +
+  geom_point(colour = "black", size = 1)
+
+```
+
+
+
+```{r}
+#Tukey's Ladder 
+library(rcompanion)
+BLOK_SAYISI_tukey <- transformTukey(train$BLOK_SAYISI,plotit=FALSE)
+
+TOPLAM_SAYI_tukey <- transformTukey(train$TOPLAM_SAYI, plotit=FALSE)
+
+```
+
+
+
+```{r}
+#BOX-COX
+library(MASS)
+
+```
+
+
+```{r}
+#FEV icin
+Box_SET_BAŞINA_SAYI <- boxcox(train$SET_BAŞINA_SAYI ~ 1,            
+                  lambda = seq(-6,6,0.1))      # Try values -6 to 6 by 0.1
+Cox_SET_BAŞINA_SAYI <- data.frame(Box_SET_BAŞINA_SAYI$x, Box_SET_BAŞINA_SAYI$y) 
+Cox_SET_BAŞINA_SAYI <- Cox_SET_BAŞINA_SAYI[order(-Cox_SET_BAŞINA_SAYI$Box_SET_BAŞINA_SAYI.y),]  
+Cox_SET_BAŞINA_SAYI[1,] 
+lambda <- Cox_SET_BAŞINA_SAYI[1, "Box_SET_BAŞINA_SAYI.x"]
+lambda
+
+```
+
+
+```{r}
+#Age icin:
+Box_TOPLAM_SAYI <- boxcox(train$TOPLAM_SAYI ~ 1,            
+                  lambda = seq(-6,6,0.1))      # Try values -6 to 6 by 0.1
+Cox_TOPLAM_SAYI <- data.frame(Box_TOPLAM_SAYI$x, Box_TOPLAM_SAYI$y) 
+Cox_TOPLAM_SAYI <- Cox_TOPLAM_SAYI[order(-Cox_TOPLAM_SAYI$Box_TOPLAM_SAYI.y),] 
+Cox_TOPLAM_SAYI[1,] 
+lambda_TOPLAM_SAYI <- Cox_TOPLAM_SAYI[1, "Box_TOPLAM_SAYI.x"] 
+lambda_TOPLAM_SAYI
+```
+
+
+```{r}
+#ham hali uzerınden sacılım matrisi:
+orj <- train[,c(7,8,9)] # Bagımlı degisken sag alt koseye alındı
+library(PerformanceAnalytics)
+chart.Correlation(orj, histogram=TRUE, pch=19)
+
+```
+
+
+```{r}
+#donusturulmus degiskenler uzerinden sacılım matrisi:
+transform_train <- train[,c(9,10,7)] 
+chart.Correlation(transform_train, histogram=TRUE, pch=19)
+
+```
+
+
+```{r}
+##Mozaik Çizimi:
+table3 <- xtabs(~TAKIM+Ser_kat+OYUNCU, data=train)
+ftable(table3)
+
+library(ggplot2)
+library(ggmosaic)
+ggplot(train) +
+  geom_mosaic(aes(x = product(TAKIM, OYUNCU), fill=TAKIM)) +
+  labs(x = "OYUNCU ", title='f(TAKIM Kategorileri, OYUNCU Cinsiyet)') + 
+  facet_grid(Ser_kat~.)
+
+```
+
+
+
+```{r}
+##Yıldız Grafikleri:
+data_sorted <- train[order(-train$BLOK_SAYISI),]
+
+```
+
+
+
+```{r}
+#Datayı dilimleme
+library(ggplot2)
+data_sorted$group <- as.numeric(cut_number(as.numeric(rownames(data_sorted)), 10)) 
+
+library(dplyr)
+data_star<-data_sorted %>%
+  group_by(group) %>% 
+  dplyr::summarize(TOPLAM_SAYI= mean(TOPLAM_SAYI),IYI_SERVİS= mean(IYI_SERVİS),BLOK_SAYISI= mean(BLOK_SAYISI))
+
+stars(data_star[,-1], key.loc = c(15,1.25),main = "Starplot",label=row.names(data_star),cex=.7)
+
+```
+
+
+```{r}
+##Çardak Çizimi:
+library(lattice)
+library(dplyr)
+tr_select<-filter(train,between(TOPLAM_SAYI,7,12))
+xyplot(BLOK_SAYISI ~ IYI_SERVİS | TOPLAM_SAYI, data = tr_select)
+
+```
+
+
+```{r}
+#Hatırlatma:
+library(funModeling)
+plot_num(train)#niceller
+
+```
+
+```{r}
+library(caret)
+featurePlot(x=train[,c("TOPLAM_SAYI","IYI_SERVİS")],y=train$BLOK_HUCÜM) #Sacılım cizimi
+
+train$BLOK_HUCÜM_log<-log(train$BLOK_HUCÜM) #FEV'de logaritmik dönüsüm
+train$TOPLAM_SAYI_kok<-sqrt(train$TOPLAM_SAYI) #Age'de kok dönüsümü
+
+```
+
+
+
+
+```{r}
+#yeniden sacılımlarına bakılmıstı:
+library(ggplot2)
+
+ggplot(train, aes(HATALI_SERVİS,BLOK_HUCÜM_log,label=rownames(train)))+
+  geom_point(size=0.70)+
+  geom_text(label=rownames(train),nudge_x=0.20,check_overlap=T,size=2.5)+
+  geom_smooth(method="loess",col="red",se=FALSE)
+
+ggplot(train, aes(TOPLAM_SAYI_kok,BLOK_HUCÜM_log))+
+  geom_point(size=1)+
+  geom_text(label=rownames(train),nudge_x=0.04,check_overlap=T,size=2.5)+
+  geom_smooth(method = "loess", col="darkblue",se = FALSE)
+
+```
+
+
+
+```{r}
+#köklü agei merkezilestirip karesel terimlerine bakma:
+mean_agekok<-mean(train$TOPLAM_SAYI_kok)
+train$TOPLAM_SAYI_kok_merk<-(train$TOPLAM_SAYI_kok-mean_agekok)
+
+ggplot(train, aes(x = TOPLAM_SAYI_kok_merk, y =BLOK_HUCÜM_log )) +
+  stat_smooth(method = "lm", se = FALSE, color = "green", formula = y ~ x) +
+  stat_smooth(method = "lm", se = FALSE, color = "blue", formula = y ~ x + I(x ^ 2)) +
+  stat_smooth(method = "lm", se = FALSE, color = "red", formula = y ~ x + I(x ^ 2)+ I(x ^ 3)) +
+  geom_point(colour = "black", size = 1)+
+  geom_text(label=rownames(train),nudge_x=0.05,check_overlap=T,size=2.5)
+
+```
+
+
+
+```{r}
+#test kumesi:
+test <- read_excel("test.xlsx")
+test$TAKIM <- as.factor(test$TAKIM)
+test$ŞEHİR <- as.factor(test$ŞEHİR)
+test$OYUNCU <- as.factor(test$OYUNCU)
+test$UYRUĞU <- as.factor(test$UYRUĞU)
+test$POZİSYON <- as.factor(test$POZİSYON)
+summary(test)
+
+test$BLOK_HUCÜM_log<-log(test$BLOK_HUCÜM) #FEV'de logaritmik dönüsüm
+test$TOPLAM_SAYI_kok<-sqrt(test$TOPLAM_SAYI) #Age'de kok dönüsümü
+test$TOPLAM_SAYI_kok_merk<-(test$TOPLAM_SAYI_kok-mean(test$TOPLAM_SAYI_kok))
+
+```
+
+
+```{r}
+#Secenek modeller
+fit1<-lm(BLOK_HUCÜM ~ TOPLAM_SAYI+ OYNANMIŞ_SET+IYI_SERVİS+OYUNCU, data=train)
+summary(fit1)
+fit1_1<-lm(BLOK_HUCÜM ~ TOPLAM_SAYI+ OYNANMIŞ_SET+IYI_SERVİS, data=train)
+summary(fit1_1)
+
+```
+
+
+```{r}
+#Tahmin
+predictions <- predict(fit1_1, test) #test uzerınden
+
+```
+
+
+
+```{r}
+# Model performans
+#train:
+round(defaultSummary(data.frame(obs=train$BLOK_HUCÜM,pred=predict(fit1_1,train))),2)
+#test:
+round(defaultSummary(data.frame(obs=test$BLOK_HUCÜM,pred=predict(fit1_1,test))),2)
+
+library(ggfortify)
+autoplot(fit1_1)
+
+```
+
+
+
+```{r}
+#Modelleme- polinomial:
+#merkezilestirilmis uzerinden
+fit2<-lm(BLOK_HUCÜM_log ~ TOPLAM_SAYI_kok_merk + I(TOPLAM_SAYI_kok_merk^2)+I(TOPLAM_SAYI_kok_merk^3)+KAZANILMIŞ_SAYI+HATALI_SERVİS+OYUNCU , data = train)
+summary(fit2)
+fit2<-lm(BLOK_HUCÜM_log ~ TOPLAM_SAYI_kok +TOPLAM_SAYI+TOPLAM_SAYI, data = train)
+summary(fit2)
+
+fit2_res<-as.data.frame(t(defaultSummary(data.frame(obs=train$BLOK_HUCÜM_log,pred=predict(fit2,train)))))
+rownames(fit2_res)<-"fit2"
+
+fit3<-lm(BLOK_HUCÜM_log ~ TOPLAM_SAYI_kok_merk + I(TOPLAM_SAYI_kok_merk^2)+I(TOPLAM_SAYI_kok_merk^3)+IYI_SERVİS+IYI_SERVİS*TOPLAM_SAYI_kok_merk , data = train)
+summary(fit3)
+fit3_res<-as.data.frame(t(defaultSummary(data.frame(obs=train$BLOK_HUCÜM_log,pred=predict(fit3,train)))))
+rownames(fit3_res)<-"fit3"
+
+fit4<-lm(BLOK_HUCÜM_log ~ OYNANMIŞ_SET+IYI_SERVİS+OYUNCU, data = train)
+summary(fit4)
+fit4<-lm(BLOK_HUCÜM_log ~ HATALI_SERVİS+TOPLAM_SAYI, data = train)
+summary(fit4)
+fit4_res<-as.data.frame(t(defaultSummary(data.frame(obs=train$BLOK_HUCÜM_log,pred=predict(fit4,train)))))
+rownames(fit4_res)<-"fit4"
+
+fit5<-lm(BLOK_HUCÜM_log ~ OYNANMIŞ_SET, data = train)
+summary(fit5)
+fit5_res<-as.data.frame(t(defaultSummary(data.frame(obs=train$BLOK_HUCÜM_log,pred=predict(fit5,train)))))
+rownames(fit5_res)<-"fit5"
+
+round(rbind(fit2_res,fit3_res,fit4_res,fit5_res),3)
+
+```
+
+
+
+```{r}
+#test icin:
+fit2_res_test<-as.data.frame(t(defaultSummary(data.frame(obs=test$BLOK_HUCÜM_log,pred=predict(fit2,test)))))
+rownames(fit2_res_test)<-"fit2"
+fit3_res_test<-as.data.frame(t(defaultSummary(data.frame(obs=test$BLOK_HUCÜM_log,pred=predict(fit3,test)))))
+rownames(fit3_res_test)<-"fit3"
+fit4_res_test<-as.data.frame(t(defaultSummary(data.frame(obs=test$BLOK_HUCÜM_log,pred=predict(fit4,test)))))
+rownames(fit4_res_test)<-"fit4"
+fit5_res_test<-as.data.frame(t(defaultSummary(data.frame(obs=test$BLOK_HUCÜM_log,pred=predict(fit5,test)))))
+rownames(fit5_res_test)<-"fit5"
+
+round(rbind(fit2_res_test,fit3_res_test,fit4_res_test,fit5_res_test),2)
+
+list2<-list(fit2,fit3,fit4,fit5)
+
+PRESS <- function(linmodel) {   pr <- residuals(linmodel)/(1 - lm.influence(linmodel)$hat)
+sum(pr^2)
+}
+
+for (i in list2) {
+  print(paste("Press:",round(PRESS(i),3)))
+}
+
+```
+
+
+
+```{r}
+library(ggfortify)
+autoplot(fit2)
+#autoplot alternatifi:
+par(mfrow=c(2,2))
+plot(fit2)
+
+tr_yeni<-train[-c(1,83),]
+fit2_yeni<-lm(BLOK_HUCÜM_log ~ TOPLAM_SAYI_kok+ IYI_SERVİS+KAZANILMIŞ_SAYI, data = tr_yeni)
+summary(fit2_yeni)
+autoplot(fit2_yeni)
+
+defaultSummary(data.frame(obs=train$BLOK_HUCÜM_log,pred=predict(fit2_yeni,train)))
+defaultSummary(data.frame(obs=test$BLOK_HUCÜM_log,pred=predict(fit2_yeni,test)))
+
+
+
+```
+
+
+
+```{r}
+#CART - Regression
+library(rpart)
+library(rpart.plot)
+library("caret")
+cart<-rpart(BLOK_HUCÜM_log~TOPLAM_SAYI_kok+IYI_SERVİS+KAZANILMIŞ_SAYI+POZİSYON , data=train)
+cart$variable.importance
+cart
+rpart.plot(cart)
+
+```
+
+
+
+```{r}
+#predict(cart)#tahminlemesi
+#train icin:
+defaultSummary(data.frame(obs=train$BLOK_HUCÜM_log,pred=predict(cart,train)))
+
+```
+
+
+```{r}
+#test icin:
+defaultSummary(data.frame(obs=test$BLOK_HUCÜM_log,pred=predict(cart,test)))
+
+
+train$Target[train$IYI_SERVİS >= 0 & train$IYI_SERVİS <=  6]  <- "Kotu"
+train$Target[train$IYI_SERVİS >= 7 & train$IYI_SERVİS <=  14]  <- "Orta"
+train$Target[train$IYI_SERVİS >= 15] <- "Iyı"
+
+test$Target[test$IYI_SERVİS >= 0 & test$IYI_SERVİS <=  6]  <- "Kotu"
+test$Target[test$IYI_SERVİS >= 7 & test$IYI_SERVİS <=  14]  <- "Orta"
+test$Target[test$IYI_SERVİS >= 15] <- "Iyı"
+
+train$Target<-as.factor(train$Target)
+summary(train)
+train$Target<-as.factor(train$Target)
+summary(train)
+
+```
+
+
+
+```{r}
+#modelleme
+library(rpart)
+clsf_rpart<-rpart(Target~ TOPLAM_SAYI_kok+IYI_SERVİS+KAZANILMIŞ_SAYI+TAKIM, data=train, method="class")
+rpart.plot(clsf_rpart)
+
+
+```
+
+
+```{r}
+#Tablo üzerinden hata matrisi olusturalım - egitim icin:
+tb<-table(predict(clsf_rpart, train, type="class"),train$Target)
+confusionMatrix(tb,positive="TAKIM")
+
+```
+
+
+```{r}
+#test icin:
+tb2<-table(predict(clsf_rpart, test, type="class"),test$Target)
+confusionMatrix(tb2,positive="TAKIM")
+```
+
